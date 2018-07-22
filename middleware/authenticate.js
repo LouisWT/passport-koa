@@ -37,7 +37,7 @@ module.exports = function authenticate(passport, name, options) {
   }
   if (typeof options === 'function') {
     options = {};
-    return new Error('Sorry, not support callback by now')
+    return new Error('Sorry, not support callback by now');
   }
   options = options || {};
   return async (koaCtx, koaNext) => {
