@@ -27,7 +27,7 @@ only difference between passport.js usage is `passport.framework(passport-koa);`
 ### Difference
 passport-koa remove the session parts in passport, if you need session auth in your app, just load session middleware and write or find a strategy.
 
-`passport.authenticate('custon', options)`have some options
+`passport.authenticate(someStrategy, options)`have some options
 ```
   failureRedirect: String // when auth failed ctx redirect to this url
   successRedirect: String // when auth successed ctx redirect to this url
