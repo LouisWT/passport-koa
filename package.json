@@ -1,6 +1,6 @@
 {
   "name": "passport-koa",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "koa framework plugin for passport.js",
   "main": "framework/connect.js",
   "scripts": {
