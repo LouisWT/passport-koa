@@ -1,0 +1,27 @@
+{
+  "name": "passport-koa",
+  "version": "0.0.1",
+  "description": "koa framework plugin for passport.js",
+  "main": "framework/connect.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LouisWT/passport-koa.git"
+  },
+  "keywords": [
+    "Koa2",
+    "Node.js",
+    "passport.js"
+  ],
+  "author": "LouisWT",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/LouisWT/passport-koa/issues"
+  },
+  "homepage": "https://github.com/LouisWT/passport-koa#readme",
+  "dependencies": {
+    "passport": "^0.4.0"
+  }
+}
