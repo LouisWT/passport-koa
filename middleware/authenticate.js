@@ -109,15 +109,25 @@ module.exports = function authenticate(passport, name, options) {
         strategy.authenticate(ctx, options);
       };
       runCtx(koaCtx, (err, result) => {
-        if (err) reject(new Error(err));
-        else resolve(result);
+        if (err instanceof AuthenticationError) {
+          if (options.failWithError) {
+            console.error(err);
+            reject();
+          } else {
+            reject();
+          }
+        } else if (err) {
+          reject(new Error(err));
+        } else {
+          resolve(result);
+        }
       });
     });
     try {
       await runPro;
       await koaNext();
     } catch (error) {
-      if (options.failWithError) {
+      if (error) {
         console.log(error);
       }
     }
