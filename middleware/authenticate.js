@@ -23,11 +23,10 @@ const AuthenticationError = require('passport/lib/errors/authenticationerror');
  *   - `failureMessage`   True to store failure message in
  *                        req.session.messages, or a string to use as override
  *                        message for failure.
- *   - `assignProperty`   Assign the object provided by the verify callback to given property
- *
+ *   - `session`          use session
+ * 
  * @param {String|Array} name
  * @param {Object} options
- * @param {Function} callback
  * @return {Function}
  * @api public
  */
@@ -35,101 +34,218 @@ module.exports = function authenticate(passport, name, options) {
   if (!name) {
     return new Error('A strategy name require');
   }
+
   if (typeof options === 'function') {
-    options = {};
-    return new Error('Sorry, not support callback by now');
+    throw new Error('Sorry, passport-koa do not support callback, prefer middleware');
   }
   options = options || {};
-  return async (koaCtx, koaNext) => {
-    const runPro = new Promise((resolve, reject) => {
-      const runCtx = (ctx, next) => {
-        let failure = {};
-        function failed() {
-          const challenge = failure.challenge;
-          // if (callback) {
-          //   return next(false, callback(null, false, challenge, failure.status));
-          // }
-          if (options.failureRedirect) {
-            return ctx.redirect(options.failureRedirect);
-          }
 
-          ctx.status = 401;
-          ctx.set('WWW-Authenticate', challenge);
-          ctx.body = challenge;
-          return next(new AuthenticationError(http.STATUS_CODES[ctx.status], 401));
-        }
+  return async (ctx, next) => {
+    const req = {
+      // application instance
+      app: ctx.app,
+      // request URL
+      baseUrl: ctx.url,
+      // request bodu
+      body: ctx.request.body,
+      // cookies
+      cookies: ctx.cookies,
+      // cache fresh
+      fresh: ctx.fresh,
+      // hostname
+      hostname: ctx.hostname,
+      // ip
+      ip: ctx.ip,
+      ips: ctx.ips,
+      // request method
+      method: ctx.method,
+      originalUrl: ctx.originalUrl,
+      // url params
+      params: ctx.params,
+      // request path
+      path: ctx.path,
+      // request protocol
+      protocol: ctx.protocol,
+      // query param
+      query: ctx.query,
+      // https
+      secure: ctx.secure,
+      // signed cookie
+      signedCookies: ctx.cookies,
+      // !ctx.fresh
+      stale: ctx.stale,
+      subdomains: ctx.subdomains,
+      xhr: ctx.headers['X-Requested-With'] === 'XMLHttpRequest',
+    };
 
-        const layer = name;
-        const prototype = passport._strategy(layer);
-        if (!prototype) { return next(new Error(`Unknown authentication strategy "${layer}"`)); }
-        const strategy = Object.create(prototype);
+    let strategyPrototype;
+    if (typeof name === 'string' && passport._strategies[name])
+      strategyPrototype = passport._strategies[name];
+    else
+      throw new Error('passport.authenticate can not be used before add a strategy');
 
-        strategy.success = (user, info) => {
-          // if (callback) {
-          //   return next(false, callback(null, user, info));
-          // }
-          if (options.assignProperty) {
-            ctx.state = ctx.state ? ctx.state : {};
-            ctx.state[options.assignProperty] = user;
-          } else {
-            ctx.state.user = user;
-          }
-          if (options.successRedirect) {
-            ctx.redirect(options.successRedirect);
-          }
-          return next();
-        };
-
-        strategy.fail = (challenge, status) => {
-          if (typeof challenge === 'number') {
-            status = challenge;
-            challenge = undefined;
-          }
-
-          failure = { challenge, status };
-          failed();
-        };
-
-        strategy.redirect = (url, status) => {
-          ctx.status = status || 302;
-          ctx.set('Location', url);
-          ctx.set('Content-Length', '0');
-        };
-
-        strategy.pass = () => {
-          return next();
-        };
-
-        strategy.error = (err) => {
-          // if (callback) {
-          //   return next(false, callback(err));
-          // }
-          return next(err);
-        };
-        strategy.authenticate(ctx, options);
-      };
-      runCtx(koaCtx, (err, result) => {
-        if (err instanceof AuthenticationError) {
-          if (options.failWithError) {
-            console.error(err);
-            reject();
-          } else {
-            reject();
-          }
-        } else if (err) {
-          reject(new Error(err));
-        } else {
-          resolve(result);
-        }
-      });
-    });
-    try {
-      await runPro;
-      await koaNext();
-    } catch (error) {
-      if (error) {
-        console.log(error);
+    async function onSuccess(user, info) {
+      // success msg
+      let msg;
+      info = info || {};
+      if (typeof options.successMessage === 'boolean') msg = info.message || info;
+      if (typeof options.successMessage === 'string') msg = options.successMessage;
+      if (ctx.session && typeof msg === 'string') {
+        ctx.session.messages = ctx.session.messages || [];
+        ctx.session.messages.push(msg);
       }
+
+      await new Promise((resolve, reject) => {
+        ctx.req.logIn(user, options, function (err) {
+          if (err) { reject(err); }
+          
+          function complete() {
+            if (options.successReturnToOrRedirect) {
+              let url = options.successReturnToOrRedirect;
+              if (ctx.session && ctx.session.returnTo) {
+                url = ctx.session.returnTo;
+                delete ctx.session.returnTo;
+              }
+              resolve({
+                type: 'redirect',
+                url,
+              })
+            }
+            if (options.successRedirect) {
+              resolve({
+                type: 'redirect',
+                url: options.successRedirect,
+              })
+            }
+            resolve();
+          }
+          if (options.authInfo !== false) {
+            passport.transformAuthInfo(info, ctx, function(err, tinfo) {
+              if (err) reject(err);
+              ctx.authInfo = tinfo;
+              complete();
+            });
+          } else {
+            complete();
+          }
+        });
+      })
+      .then(async (value) => {
+        if (ctx.req._passport && ctx.req._passport.instance) {
+          ctx[ctx.req._passport.instance._userProperty || 'user'] = user;
+        }
+        if (!value) return await next();
+        if (value.type === 'redirect') ctx.redirect(value.url);
+      })
+      .catch((err) => {
+        throw new Error(err);
+      })  
     }
+
+    async function onFail(challenge, status) {
+      let msg = 'Unauthorized';
+      // display challenge msg
+      if (typeof options.failureMessage === 'boolean' && challenge) {
+        msg = challenge.message || challenge;
+      }
+      // display failureMessage
+      if (typeof options.failureMessage === 'string') {
+        msg = options.failureMessage;
+      }
+      // session
+      if (ctx.session && typeof msg === 'string') {
+        ctx.session.messages = ctx.session.messages || [];
+        ctx.session.messages.push(msg);
+      }
+      // fail redirect
+      if (options.failureRedirect) {
+        ctx.redirect(options.failureRedirect);
+        return;
+      }
+      ctx.status = status ? status : 401;
+      ctx.body = msg;
+      if (ctx.status === 401) {
+        ctx.set('WWW-Authenticate', msg);
+      }
+      // fail throw error
+      if (options.failWithError) {
+        throw new AuthenticationError(http.STATUS_CODES[ctx.status], status);
+      }
+      return;
+    };
+
+    async function onRedirect(url, status) {
+      ctx.status = status || 302;
+      ctx.set('Location', url);
+      ctx.set('Content-Length', '0');
+      ctx.redirect(url);
+      return;
+    };
+
+    async function onError(err) {
+      throw new Error(err);
+    };
+
+    async function processAuth(strategyPrototype) {
+      const strategy = Object.create(strategyPrototype);
+      await new Promise((resolve, reject) => {
+        try {
+          strategy.success = function (user, info) {
+            resolve({
+              type: 'success',
+              user,
+              info,
+            });
+          };
+          strategy.fail = function (challenge, status) {
+            resolve({
+              type: 'fail',
+              challenge,
+              status
+            });
+          };
+          strategy.redirect = function (url, status) {
+            resolve({
+              type: 'redirect',
+              url,
+              status
+            });
+          };
+          strategy.pass = async function () {
+            resolve({
+              type: 'pass',
+            });
+          };
+          strategy.error = function (err) {
+            resolve({
+              type: 'error',
+              err,
+            });
+          };
+          strategy.authenticate(req, options);
+        } catch (err) {
+          reject(err);
+        }
+      }).then(async (value) => {
+        switch (value.type) {
+          case 'success': await onSuccess(value.user, value.info);
+            break;
+          case 'fail': await onFail(value.challenge, value.status);
+            break;
+          case 'redirect': await onRedirect(value.url, value.status);
+            break;
+          case 'pass': await next();
+            break;
+          case 'error': await onError(err);
+            break;
+          default:
+            await next();
+        }
+      })
+      .catch((err) => {
+        throw new Error(err);
+      })
+    }
+    await processAuth(strategyPrototype);
   };
 };
