@@ -141,5 +141,4 @@ app.listen(3000, () => {
   console.log('listen 3000')
 });
 ```
-only difference between passport.js usage is `passport.framework(passport-koa);`， and some options in passport.js is not support in passport-koa
-
+only difference between passport.js usage is `passport.framework(passport-koa);`
