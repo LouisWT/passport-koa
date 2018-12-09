@@ -41,42 +41,45 @@ module.exports = function authenticate(passport, name, options) {
   options = options || {};
 
   return async (ctx, next) => {
-    const req = {
-      // application instance
-      app: ctx.app,
-      // request URL
-      baseUrl: ctx.url,
-      // request bodu
-      body: ctx.request.body,
-      // cookies
-      cookies: ctx.cookies,
-      // cache fresh
-      fresh: ctx.fresh,
-      // hostname
-      hostname: ctx.hostname,
-      // ip
-      ip: ctx.ip,
-      ips: ctx.ips,
-      // request method
-      method: ctx.method,
-      originalUrl: ctx.originalUrl,
-      // url params
-      params: ctx.params,
-      // request path
-      path: ctx.path,
-      // request protocol
-      protocol: ctx.protocol,
-      // query param
-      query: ctx.query,
-      // https
-      secure: ctx.secure,
-      // signed cookie
-      signedCookies: ctx.cookies,
-      // !ctx.fresh
-      stale: ctx.stale,
-      subdomains: ctx.subdomains,
-      xhr: ctx.headers['X-Requested-With'] === 'XMLHttpRequest',
-    };
+    // {
+    //   // application instance
+    //   app: ctx.app,
+    //   // request URL
+    //   baseUrl: ctx.url,
+    //   // request bodu
+    //   body: ctx.request.body,
+    //   // cookies
+    //   cookies: ctx.cookies,
+    //   // cache fresh
+    //   fresh: ctx.fresh,
+    //   // hostname
+    //   hostname: ctx.hostname,
+    //   // ip
+    //   ip: ctx.ip,
+    //   ips: ctx.ips,
+    //   // request method
+    //   method: ctx.method,
+    //   originalUrl: ctx.originalUrl,
+    //   // url params
+    //   params: ctx.params,
+    //   // request path
+    //   path: ctx.path,
+    //   // request protocol
+    //   protocol: ctx.protocol,
+    //   // query param
+    //   query: ctx.query,
+    //   // https
+    //   secure: ctx.secure,
+    //   // signed cookie
+    //   signedCookies: ctx.cookies,
+    //   // !ctx.fresh
+    //   stale: ctx.stale,
+    //   subdomains: ctx.subdomains,
+    //   xhr: ctx.headers['X-Requested-With'] === 'XMLHttpRequest',
+    //   header: ctx.header,
+    //   headers: ctx.headers,
+    // };
+    const req = ctx.req;
 
     let strategyPrototype;
     if (typeof name === 'string' && passport._strategies[name])
@@ -97,7 +100,7 @@ module.exports = function authenticate(passport, name, options) {
 
       await new Promise((resolve, reject) => {
         ctx.req.logIn(user, options, function (err) {
-          if (err) { reject(err); }
+          if (err) { throw err; }
           
           function complete() {
             if (options.successReturnToOrRedirect) {
@@ -138,7 +141,7 @@ module.exports = function authenticate(passport, name, options) {
         if (value.type === 'redirect') ctx.redirect(value.url);
       })
       .catch((err) => {
-        throw new Error(err);
+        throw err;
       })  
     }
 
@@ -183,7 +186,7 @@ module.exports = function authenticate(passport, name, options) {
     };
 
     async function onError(err) {
-      throw new Error(err);
+      throw err;
     };
 
     async function processAuth(strategyPrototype) {
@@ -224,7 +227,7 @@ module.exports = function authenticate(passport, name, options) {
           };
           strategy.authenticate(req, options);
         } catch (err) {
-          reject(err);
+          throw err;
         }
       }).then(async (value) => {
         switch (value.type) {
@@ -236,14 +239,14 @@ module.exports = function authenticate(passport, name, options) {
             break;
           case 'pass': await next();
             break;
-          case 'error': await onError(err);
+          case 'error': await onError(value.err);
             break;
           default:
             await next();
         }
       })
       .catch((err) => {
-        throw new Error(err);
+        throw err;
       })
     }
     await processAuth(strategyPrototype);
